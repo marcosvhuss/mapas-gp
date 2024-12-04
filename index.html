@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Grupos Pequenos</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="imagem/png" href="favicon.ico">
+</head>
+<body>
+    <img src="logo_Onda-Dura.png" alt="logo_Onda-Dura">
+    <h1>Mapa dos Grupos Pequenos - Onda Dura</h1>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Puxando o mapa pra Joinville
+        var map = L.map('map').setView([-26.298116, -48.848273], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        
+        var sheetURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTRTzELYlhUzHADmIgSdSuWLvJ86lcfdlnBqa0VJ8wF9IBBOaq6mR8jK3CeX0kSAVmqqCyj8uRdDewe/pub?gid=0&single=true&output=csv'; // URL da planilha do relatório em CSV
+        const apiKey = '22a35925039d49f1b27e6e30a2a2f583';
+
+        // Estou transformando o endereço em coordenadas para o OpenCage "geocrodificar"
+        async function geocodeAddress(address) {
+            try {
+                const response = await fetch(`https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(address)}&key=${apiKey}`);
+                const data = await response.json();
+                if (data.results.length > 0) {
+                    const location = data.results[0].geometry;
+                    return [location.lat, location.lng]; // Retorna latitude e longitude
+                } else {
+                    console.error('Endereço não encontrado:', address);
+                    return null;
+                }
+            } catch (error) {
+                console.error('Erro ao geocodificar o endereço:', address, error);
+                return null;
+            }
+        }
+
+        // puxado os dados da planilha
+        fetch(sheetURL)
+            .then(response => response.text())
+            .then(async csvText => {
+                const rows = csvText.split('\n').slice(1); // pulo cabeçalho
+                for (const [index, row] of rows.entries()) {
+                    if (!row.trim()) continue; // pulo linhas vazias
+
+                    const columns = row.split(',');
+                    const nome = columns[7]?.trim(); // Nome do Apascentador (Coluna H)
+                    const endereco = columns[6]?.trim(); // Endereço do GP (Coluna G)
+                    const info = columns[1]?.trim() || ''; // Perfil do GP (Coluna B)
+                    const dia = columns[2]?.trim() || ''; // Dia da semana do GP (Coluna C)
+                    const horario = columns[3]?.trim() || '';
+
+                    if (!endereco) {
+                        console.warn(`Linha ${index + 2}: Endereço vazio na planilha.`);
+                        continue;
+                    }
+
+                    console.log(`Geocodificando: ${nome} - ${endereco}`);
+                    const coordinates = await geocodeAddress(endereco);
+
+                    if (coordinates) {
+                        console.log(`Adicionando marcador: ${coordinates}`);
+                        L.marker(coordinates)
+                            .addTo(map)
+                            .bindPopup(`<b>${nome}</b><br>${info}<br>${endereco}<br>${dia} ${horario}`);
+                    } else {
+                        console.warn(`Falha ao geocodificar o endereço: ${endereco}`);
+                    }
+                }
+            })
+            .catch(error => console.error('Erro ao carregar a planilha:', error));
+    </script>
+</body>
+</html>
